@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hand Try-On Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<style>
+:root{
+  /* layout: the mirror (stage) takes the room; the counter (panel) sits under it on phones, beside it on wide screens */
+  --velvet:#0d241f;
+  --velvet-2:#143129;
+  --line:#2b4a40;
+  --ivory:#f3eee2;
+  --muted:#9fb3a9;
+  --brass:#d2ab55;
+  --warn:#ff9c85;
+  --font-display:'Bodoni Moda','Didot','Times New Roman',serif;
+  --font-body:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--velvet);color:var(--ivory);
+  font-family:var(--font-body);font-size:14px;line-height:1.4;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+#wrap{position:relative;flex:1;min-height:0;background:#081713;overflow:hidden}
+#wrap canvas,#video{position:absolute;inset:0;width:100%;height:100%;display:block}
+#video{object-fit:cover;transform:scaleX(-1)}
+#gl,#fx{pointer-events:none}
+.pill{
+  position:absolute;left:16px;top:12px;max-width:calc(100% - 32px);
+  font-size:11.5px;color:var(--ivory);background:rgba(8,23,19,.72);
+  border:1px solid var(--line);border-radius:999px;padding:4px 10px;
+}
+.pill[data-tone="live"]{border-color:var(--brass);color:var(--brass)}
+.pill[data-tone="warn"]{border-color:var(--warn);color:var(--warn);border-radius:10px}
+.msg{
+  position:absolute;left:50%;top:14%;transform:translateX(-50%);max-width:calc(100% - 32px);
+  background:rgba(8,23,19,.78);border-radius:10px;padding:8px 14px;font-size:15px;font-weight:500;text-align:center;
+}
+.hint{
+  position:absolute;left:16px;right:16px;bottom:10px;margin:0;text-align:center;
+  font-size:12.5px;text-wrap:balance;text-shadow:0 1px 6px rgba(0,0,0,.9);pointer-events:none;
+}
+.caption{
+  position:absolute;left:0;right:0;bottom:0;padding:48px 24px 24px;text-align:center;pointer-events:none;
+  background:linear-gradient(to top,rgba(5,14,12,.9),rgba(5,14,12,0));
+}
+.caption .eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass)}
+.caption .name{font-family:var(--font-display);font-weight:700;font-size:clamp(28px,6vw,56px);line-height:1.05;margin:4px 0}
+.caption .price{font-size:clamp(16px,2.6vw,24px);font-variant-numeric:tabular-nums}
+.caption .how{color:var(--muted);font-size:13px;margin-top:8px}
+#exitWin{position:absolute;right:16px;top:10px;background:rgba(8,23,19,.72)}
+
+.panel{
+  background:var(--velvet-2);border-top:1px solid var(--line);
+  padding:12px 16px 14px;display:flex;flex-direction:column;gap:10px;
+}
+.head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+h1{font-family:var(--font-display);font-weight:700;font-size:19px;margin:0 auto 0 0;white-space:nowrap}
+button{
+  font:500 13px var(--font-body);color:var(--ivory);background:transparent;
+  border:1px solid var(--line);border-radius:8px;padding:7px 11px;min-height:34px;cursor:pointer;
+}
+button:hover{border-color:var(--muted)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+button:disabled{opacity:.5;cursor:default}
+button.primary{background:var(--brass);border-color:var(--brass);color:#231a05;font-weight:600}
+.tabs{display:flex}
+.tabs button{flex:1;border-radius:0;margin-left:-1px}
+.tabs button:first-child{border-radius:8px 0 0 8px;margin-left:0}
+.tabs button:last-child{border-radius:0 8px 8px 0}
+.tabs button[aria-pressed="true"]{background:var(--ivory);color:var(--velvet);border-color:var(--ivory)}
+.items{display:flex;gap:8px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:thin}
+.chip{
+  flex:0 0 auto;display:flex;align-items:center;gap:8px;text-align:left;
+  padding:6px 12px 6px 6px;border-radius:999px;
+}
+.chip[aria-pressed="true"]{border-color:var(--brass);background:rgba(210,171,85,.12)}
+.chip .sw{width:26px;height:26px;border-radius:50%;flex:0 0 auto;border:1px solid rgba(255,255,255,.25)}
+.chip .sw.none{background:repeating-linear-gradient(45deg,transparent 0 4px,rgba(255,255,255,.25) 4px 5px)}
+.detail{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-height:22px}
+.detail .dn{font-family:var(--font-display);font-size:17px;font-weight:500}
+.detail .dd{color:var(--muted);font-size:12.5px}
+.detail .dp{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600;color:var(--brass)}
+.opts{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;color:var(--muted);font-size:12.5px}
+.opts label{display:flex;align-items:center;gap:6px}
+input[type=range]{accent-color:var(--brass);width:120px}
+input[type=checkbox]{accent-color:var(--brass)}
+.note{color:var(--muted);font-size:11.5px;margin:0}
+[hidden]{display:none !important}
+body.window .panel,body.window .hint{display:none}
+@media (min-width:860px){
+  body{flex-direction:row}
+  .panel{width:360px;border-top:0;border-left:1px solid var(--line);padding:20px;gap:14px;overflow-y:auto}
+  .items{flex-direction:column;overflow:visible}
+  .chip{border-radius:12px}
+  h1{font-size:22px;white-space:normal}
+}
+</style>
+</head>
+<body>
+<main id="wrap">
+  <video id="video" playsinline muted hidden></video>
+  <canvas id="bg"></canvas>
+  <canvas id="gl" aria-label="Try-on mirror showing the selected watch, bracelet and nail colour on a hand"></canvas>
+  <canvas id="fx"></canvas>
+  <span class="pill" id="status" role="status">Loading…</span>
+  <div class="msg" id="msg" hidden></div>
+  <p class="hint" id="hint"></p>
+  <div class="caption" id="caption" hidden>
+    <div class="eyebrow" id="capCat"></div>
+    <div class="name" id="capName"></div>
+    <div class="price" id="capPrice"></div>
+    <div class="how" id="capHow"></div>
+  </div>
+  <button id="exitWin" type="button" hidden>Exit window mode</button>
+</main>
+
+<aside class="panel">
+  <div class="head">
+    <h1>Hand Try-On Counter</h1>
+    <button class="primary" id="camBtn" type="button">Start camera</button>
+    <button id="winBtn" type="button">Window mode</button>
+  </div>
+  <div class="tabs" role="group" aria-label="Product type">
+    <button type="button" data-cat="watches" aria-pressed="true">Watches</button>
+    <button type="button" data-cat="bracelets" aria-pressed="false">Bracelets</button>
+    <button type="button" data-cat="nails" aria-pressed="false">Nails</button>
+  </div>
+  <div class="items" id="items"></div>
+  <div class="detail" id="detail"></div>
+  <div class="opts">
+    <label for="fit">Fit <input type="range" id="fit" min="0.75" max="1.3" step="0.01" value="1"></label>
+    <label for="flip" id="flipLbl"><input type="checkbox" id="flip"> Swap palm and back</label>
+  </div>
+  <p class="note">Sample catalogue. Items and prices are invented for this demo.</p>
+</aside>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+const wrap = $('wrap'), video = $('video'), bg = $('bg'), glc = $('gl'), fx = $('fx');
+const bctx = bg.getContext('2d'), fctx = fx.getContext('2d');
+const statusEl = $('status'), hintEl = $('hint'), msgEl = $('msg'), camBtn = $('camBtn');
+function setStatus(text, tone) { statusEl.textContent = text; statusEl.dataset.tone = tone || ''; }
+
+let THREE, RoomEnvironment;
+try {
+  THREE = await import('three');
+  ({ RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js'));
+} catch (e) {
+  setStatus('Could not load the 3D engine. Check your internet connection and reload the page.', 'warn');
+  throw e;
+}
+
+const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+
+/* ---------- catalogue (invented sample data) ---------- */
+const CATALOG = {
+  watches: [
+    { name: 'Marina Classic', desc: '38 mm, ivory dial, tan leather', price: 420000, metal: 'gold', dial: '#f4efe2', ink: '#2a2620', strap: '#8a5327', accent: '#b33a2b' },
+    { name: 'Harbour Diver', desc: '41 mm, black dial, steel bracelet', price: 780000, metal: 'steel', dial: '#0f1418', ink: '#f2f4f5', strap: 'steel', accent: '#3fb5ff', bezel: '#123a5c' },
+    { name: 'Sprint', desc: '40 mm, graphite dial, rubber strap', price: 265000, metal: 'black', dial: '#23272c', ink: '#ffffff', strap: '#141619', accent: '#ff6a2b' }
+  ],
+  bracelets: [
+    { name: 'Lagos Bangle', desc: 'Solid polished gold bangle', price: 210000, kind: 'bangle', metal: 'gold', sw: '#e9bd55' },
+    { name: 'Trio Stack', desc: 'Three slim bangles, mixed metals', price: 165000, kind: 'stack', sw: 'linear-gradient(90deg,#e9bd55 0 33%,#e8a892 33% 66%,#d5d9de 66%)' },
+    { name: 'Jade Beads', desc: 'Jade beads with gold spacers', price: 48000, kind: 'beads', sw: '#2f9a74' },
+    { name: 'Crystal Line', desc: 'Tennis bracelet, clear stones', price: 320000, kind: 'tennis', sw: 'radial-gradient(circle,#fff 0 30%,#c9d3df 70%)' }
+  ],
+  nails: [
+    { name: 'Cherry Lacquer', desc: 'Cream finish', price: 6500, color: '#b3122d' },
+    { name: 'Bare Minimum', desc: 'Sheer nude', price: 6500, color: '#d9a892' },
+    { name: 'Lagoon', desc: 'Deep emerald cream', price: 6500, color: '#0f6b57' },
+    { name: 'Mirror Chrome', desc: 'Chrome powder finish', price: 9000, color: '#dfe3e8', finish: 'chrome' },
+    { name: 'French Tip', desc: 'Nude base, white tip', price: 8500, color: '#e6bca9', finish: 'french' }
+  ]
+};
+const CAT_LABEL = { watches: 'Watch', bracelets: 'Bracelet', nails: 'Nail colour' };
+const CATS = ['watches', 'bracelets', 'nails'];
+const METAL = {
+  gold: { color: 0xffc661, roughness: 0.2 }, steel: { color: 0xdde1e6, roughness: 0.24 },
+  rose: { color: 0xf0b29c, roughness: 0.22 }, black: { color: 0x2a2d31, roughness: 0.38 }
+};
+const money = n => '₦' + n.toLocaleString('en-NG');
+
+/* ---------- state ---------- */
+let W = 0, H = 0, DPR = 1;
+let cat = 'watches';
+const sel = { watches: 0, bracelets: 0, nails: 0 };   // catalogue index, or -1 for none
+let fit = 1, flip = false, windowMode = false;
+const tracked = new Map();
+const sparks = [];
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let framed = false;
+try { framed = window.self !== window.top; } catch (e) { framed = true; }
+const camPossible = !framed && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+const s3 = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const m3 = (a, k) => ({ x: a.x * k, y: a.y * k, z: a.z * k });
+const a3 = (a, b) => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
+const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const x3 = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
+const len3 = a => Math.hypot(a.x, a.y, a.z);
+const n3 = a => { const l = len3(a) || 1; return m3(a, 1 / l); };
+
+/* ---------- 3D scene: pixel-space orthographic camera over the camera image ---------- */
+const renderer = new THREE.WebGLRenderer({ canvas: glc, alpha: true, antialias: true });
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(0.4, 0.9, 1); scene.add(sun);
+const cam = new THREE.OrthographicCamera(0, 1, 1, 0, -4000, 4000);
+
+const WRIST_RZ = 0.68;            // wrist thickness relative to its half-width (the unit of every wrist piece)
+const metalMat = (m, extra) => new THREE.MeshStandardMaterial(Object.assign({ color: METAL[m].color, metalness: 1, roughness: METAL[m].roughness }, extra));
+class Ellipse extends THREE.Curve {
+  constructor(rx, rz) { super(); this.rx = rx; this.rz = rz; }
+  getPoint(t, o = new THREE.Vector3()) { const a = t * Math.PI * 2; return o.set(this.rx * Math.cos(a), 0, this.rz * Math.sin(a)); }
+}
+function bandGeo(rx, rz, w, seg = 80) {      // flat strap wrapped round the wrist
+  const pos = [], nor = [], uv = [], idx = [];
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg * Math.PI * 2, c = Math.cos(t), s = Math.sin(t), l = Math.hypot(c / rx, s / rz);
+    for (const k of [-1, 1]) { pos.push(rx * c, k * w / 2, rz * s); nor.push(c / rx / l, 0, s / rz / l); uv.push(i / seg, (k + 1) / 2); }
+  }
+  for (let i = 0; i < seg; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+function dialTexture(item) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = item.dial; x.fillRect(0, 0, 256, 256);
+  x.translate(128, 128); x.strokeStyle = item.ink; x.lineCap = 'butt';
+  for (let i = 0; i < 60; i++) {
+    const big = i % 5 === 0, q = i % 15 === 0;
+    x.lineWidth = q ? 9 : big ? 5 : 1.5;
+    x.beginPath(); x.moveTo(0, -(q ? 84 : big ? 92 : 108)); x.lineTo(0, -116); x.stroke();
+    x.rotate(Math.PI / 30);
+  }
+  x.fillStyle = item.accent; x.fillRect(-14, 44, 28, 5);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+function linkTexture() {
+  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 32, 32);
+  x.fillStyle = '#6c737c'; x.fillRect(0, 0, 4, 32); x.fillStyle = '#c3c8ce'; x.fillRect(4, 10, 28, 2); x.fillRect(4, 21, 28, 2);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.repeat.set(30, 1);
+  return t;
+}
+function buildWatch(item) {
+  const g = new THREE.Group(), R = 0.6, top = WRIST_RZ + 0.04;
+  const strapMat = item.strap === 'steel'
+    ? metalMat('steel', { map: linkTexture(), side: THREE.DoubleSide })
+    : new THREE.MeshStandardMaterial({ color: item.strap, roughness: 0.78, metalness: 0, side: THREE.DoubleSide });
+  g.add(new THREE.Mesh(bandGeo(1.04, top, 0.66), strapMat));
+  const head = new THREE.Group(); head.position.z = top; head.rotation.z = Math.PI / 2;   // 12 o'clock points across the wrist
+  const caseMat = metalMat(item.metal);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 0.95, 0.19, 64), caseMat); body.rotation.x = Math.PI / 2; body.position.z = 0.095;
+  const bezel = new THREE.Mesh(new THREE.TorusGeometry(R * 0.92, 0.075, 16, 72), item.bezel ? new THREE.MeshStandardMaterial({ color: item.bezel, metalness: 0.9, roughness: 0.3 }) : caseMat); bezel.position.z = 0.22;
+  const dial = new THREE.Mesh(new THREE.CircleGeometry(R * 0.86, 64), new THREE.MeshStandardMaterial({ map: dialTexture(item), roughness: 0.55, metalness: 0.1 })); dial.position.z = 0.205;
+  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.16, 20), caseMat); crown.rotation.z = Math.PI / 2; crown.position.set(R + 0.06, 0, 0.11);
+  const mkHand = (len, wd, col, z) => {
+    const geo = new THREE.BoxGeometry(wd, len, 0.012); geo.translate(0, len * 0.38, 0);
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: col, roughness: 0.4, metalness: 0.3 })); m.position.z = z; return m;
+  };
+  const hh = mkHand(R * 0.5, 0.06, item.ink, 0.215), mh = mkHand(R * 0.74, 0.042, item.ink, 0.228), sh = mkHand(R * 0.8, 0.016, item.accent, 0.241);
+  const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.05, 16), new THREE.MeshStandardMaterial({ color: item.accent, roughness: 0.4 })); pin.rotation.x = Math.PI / 2; pin.position.z = 0.235;
+  const glass = new THREE.Mesh(new THREE.CircleGeometry(R * 0.87, 48), new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.03, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false })); glass.position.z = 0.262;
+  head.add(body, bezel, dial, crown, hh, mh, sh, pin, glass);
+  g.add(head);
+  g.userData.hands = [hh, mh, sh];
+  return g;
+}
+function buildBracelet(item) {
+  const g = new THREE.Group(), rx = 1.1, rz = WRIST_RZ + 0.1;
+  const tube = (r, metal, y, tilt) => {
+    const m = new THREE.Mesh(new THREE.TubeGeometry(new Ellipse(rx, rz), 96, r, 14, true), metalMat(metal));
+    m.position.y = y; m.rotation.x = tilt; return m;
+  };
+  const beads = (n, r, colorFn, mat) => {
+    const im = new THREE.InstancedMesh(new THREE.SphereGeometry(r, 20, 14), mat, n), d = new THREE.Object3D(), e = new Ellipse(rx, rz);
+    for (let i = 0; i < n; i++) { e.getPoint(i / n, d.position); d.updateMatrix(); im.setMatrixAt(i, d.matrix); im.setColorAt(i, new THREE.Color(colorFn(i))); }
+    im.rotation.x = 0.08; return im;
+  };
+  if (item.kind === 'bangle') g.add(tube(0.085, 'gold', 0, 0.1));
+  else if (item.kind === 'stack') g.add(tube(0.042, 'gold', -0.16, 0.05), tube(0.042, 'rose', 0, -0.07), tube(0.042, 'steel', 0.16, 0.12));
+  else if (item.kind === 'beads') g.add(beads(30, 0.105, i => i % 5 === 0 ? 0xffc661 : 0x2f9a74, new THREE.MeshPhysicalMaterial({ roughness: 0.2, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.1 })));
+  else { g.add(tube(0.03, 'steel', 0, 0.08)); g.add(beads(46, 0.07, () => 0xffffff, new THREE.MeshPhysicalMaterial({ roughness: 0.04, metalness: 0.95, clearcoat: 1 }))); }
+  return g;
+}
+function nailGeo() {            // curved shell: x across (width 1), +y towards the fingertip, +z out of the nail bed
+  const NU = 12, NV = 14, L = 1.3, pos = [], idx = [], vv = [];
+  for (let j = 0; j <= NV; j++) for (let i = 0; i <= NU; i++) {
+    const u = i / NU * 2 - 1, v = j / NV;
+    let wf = v < 0.6 ? 0.9 + 0.1 * Math.sin(v / 0.6 * Math.PI / 2) : Math.sqrt(Math.max(0, 1 - Math.pow((v - 0.6) / 0.4, 2)));
+    if (v < 0.14) wf *= 0.72 + 0.28 * Math.sqrt(1 - Math.pow(1 - v / 0.14, 2));
+    pos.push(u * 0.5 * wf, v * L, 0.17 * Math.cos(u * Math.PI / 2) - 0.05 * v * v);
+    vv.push(u, v);
+  }
+  for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) { const a = j * (NU + 1) + i, b = a + 1, c = a + NU + 1, d = c + 1; idx.push(a, b, c, b, d, c); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(pos.length).fill(1), 3));
+  g.setIndex(idx); g.computeVertexNormals(); g.userData.uv = vv;
+  return g;
+}
+function paintNail(mesh, item) {
+  const col = mesh.geometry.getAttribute('color'), uv = mesh.geometry.userData.uv;
+  const base = new THREE.Color(item.color), white = new THREE.Color('#fbf8f2');
+  for (let i = 0; i < col.count; i++) {
+    const u = uv[i * 2], v = uv[i * 2 + 1];
+    const c = item.finish === 'french' && v > 0.76 + 0.12 * u * u ? white : base;
+    col.setXYZ(i, c.r, c.g, c.b);
+  }
+  col.needsUpdate = true;
+  const m = mesh.material; m.metalness = item.finish === 'chrome' ? 1 : 0; m.roughness = item.finish === 'chrome' ? 0.06 : 0.22;
+}
+function disposeTree(o) {
+  o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } });
+}
+function makeRig() {
+  const wrist = new THREE.Group(); wrist.matrixAutoUpdate = false;
+  const occ = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.12, 4.6, 40), new THREE.MeshBasicMaterial({ colorWrite: false }));
+  occ.scale.set(0.97, 1, WRIST_RZ * 0.97); occ.position.y = -2.0; occ.renderOrder = -1;   // invisible forearm that hides what goes behind it
+  const watchSlot = new THREE.Group(), braceSlot = new THREE.Group();
+  wrist.add(occ, watchSlot, braceSlot);
+  const nails = [];
+  for (let i = 0; i < 5; i++) {
+    const m = new THREE.Mesh(nailGeo(), new THREE.MeshPhysicalMaterial({ vertexColors: true, clearcoat: 1, clearcoatRoughness: 0.06 }));
+    m.matrixAutoUpdate = false; nails.push(m); scene.add(m);
+  }
+  scene.add(wrist);
+  return { wrist, watchSlot, braceSlot, nails, hands: null };
+}
+const rigs = [makeRig(), makeRig()];
+function buildProducts() {
+  for (const r of rigs) {
+    for (const slot of [r.watchSlot, r.braceSlot]) { for (const c of [...slot.children]) { slot.remove(c); disposeTree(c); } }
+    r.hands = null;
+    const both = sel.watches >= 0 && sel.bracelets >= 0;
+    if (sel.watches >= 0) { const w = buildWatch(CATALOG.watches[sel.watches]); r.watchSlot.add(w); r.watchSlot.position.y = both ? -1.5 : -1.15; r.hands = w.userData.hands; }
+    if (sel.bracelets >= 0) { r.braceSlot.add(buildBracelet(CATALOG.bracelets[sel.bracelets])); r.braceSlot.position.y = both ? -0.62 : -0.85; }
+    if (sel.nails >= 0) r.nails.forEach(n => paintNail(n, CATALOG.nails[sel.nails]));
+  }
+}
+
+/* ---------- placing the pieces on a hand ----------
+   h.px: 21 landmarks in screen pixels. h.w3: the same landmarks in metres, x right, y up, z towards the viewer. */
+const NAIL_F = [[3, 4, 0.0135], [7, 8, 0.0115], [11, 12, 0.012], [15, 16, 0.011], [19, 20, 0.0095]];
+const SCALE_PAIRS = [[0, 5], [0, 17], [5, 17], [0, 9], [5, 9], [9, 13]];
+const V = o => new THREE.Vector3(o.x, o.y, o.z);
+function poseRig(rig, h) {
+  const w = h.w3, p = h.px;
+  const A = n3(s3(w[9], w[0]));                               // along the arm, towards the fingers
+  let T = s3(w[5], w[17]); T = n3(s3(T, m3(A, dot(T, A))));   // across the palm, towards the thumb side
+  let Nb = h.label === 'Right' ? x3(A, T) : x3(T, A);         // out of the back of the hand
+  if (flip && !h.demo) Nb = m3(Nb, -1);
+  const X = x3(A, Nb);
+  let num = 0, den = 0;
+  for (const [i, j] of SCALE_PAIRS) { num += dist(p[i], p[j]); den += Math.hypot(w[i].x - w[j].x, w[i].y - w[j].y); }
+  if (den > 0.03) h.s = h.s ? h.s + (num / den - h.s) * 0.3 : num / den;   // pixels per metre
+  const s = h.s || 3000, hw = len3(s3(w[5], w[17])), a = 0.46 * hw * s * fit;
+  rig.wrist.matrix.makeBasis(V(X), V(A), V(Nb)).scale(new THREE.Vector3(a, a, a)).setPosition(p[0].x, H - p[0].y, s * w[0].z);
+  rig.watchSlot.visible = sel.watches >= 0; rig.braceSlot.visible = sel.bracelets >= 0;
+  if (rig.hands) {
+    const d = new Date(), sec = d.getSeconds() + d.getMilliseconds() / 1000, min = d.getMinutes() + sec / 60, hr = (d.getHours() % 12) + min / 60;
+    rig.hands[0].rotation.z = -hr * Math.PI / 6; rig.hands[1].rotation.z = -min * Math.PI / 30; rig.hands[2].rotation.z = -sec * Math.PI / 30;
+  }
+  const k = hw / 0.078;
+  for (let f = 0; f < 5; f++) {
+    const [di, ti, wm] = NAIL_F[f], nail = rig.nails[f];
+    nail.visible = sel.nails >= 0;
+    if (!nail.visible) continue;
+    const F = n3(s3(w[ti], w[di]));
+    let Nf;
+    if (f === 0) { const n0 = a3(m3(Nb, 0.75), m3(T, 0.65)); Nf = n3(s3(n0, m3(F, dot(n0, F)))); }   // the thumb nail faces partly sideways
+    else Nf = n3(x3(X, F));                                   // fingers curl around the across-palm axis
+    const Xn = x3(F, Nf), wd = wm * k * s * fit;
+    const off = a3(m3(F, -wd * 1.3 * 0.9), m3(Nf, 0.0062 * k * s));
+    nail.matrix.makeBasis(V(Xn), V(F), V(Nf)).scale(new THREE.Vector3(wd, wd, wd))
+      .setPosition(p[ti].x + off.x, H - p[ti].y + off.y, s * w[ti].z + off.z);
+  }
+}
+
+/* ---------- demo hand (shown when the camera is off) ---------- */
+const TEMPLATE = [[.50,.95],[.36,.86],[.25,.76],[.17,.66],[.11,.57],[.36,.56],[.33,.40],[.31,.30],[.30,.21],
+  [.48,.53],[.48,.36],[.48,.25],[.48,.15],[.59,.55],[.61,.40],[.62,.30],[.63,.21],[.69,.61],[.73,.49],[.75,.41],[.77,.34]];
+function demoHand(now) {
+  const U = Math.min(W * 1.35, H * 0.7), pxm = U / 0.19;
+  const yaw = reduced ? 0.3 : Math.sin(now / 2400) * 0.55, pitch = reduced ? 0 : Math.sin(now / 3100) * 0.12;
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const w3 = TEMPLATE.map(([x, y]) => {
+    const X = (x - 0.46) * 0.19, Y = -(y - 0.6) * 0.19;
+    return { x: X * cy, y: Y * cp - (-X * sy) * sp, z: Y * sp + (-X * sy) * cp };
+  });
+  const px = w3.map(q => ({ x: W / 2 + q.x * pxm, y: H * 0.44 - q.y * pxm }));
+  return { px, w3, label: 'Right', demo: true, s: pxm, yaw };
+}
+function drawMannequin(h) {
+  const p = h.px, S = dist(p[5], p[17]) / Math.max(0.35, Math.cos(h.yaw)), fw = S * 0.235 * Math.max(0.6, Math.cos(h.yaw));
+  const armW = 2 * 0.46 * 0.0627 * h.s * Math.hypot(Math.cos(h.yaw), WRIST_RZ * Math.sin(h.yaw));
+  const g = bctx.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, Math.max(W, H) * 0.75);
+  g.addColorStop(0, '#1d4a3e'); g.addColorStop(1, '#081713');
+  bctx.fillStyle = g; bctx.fillRect(0, 0, W, H);
+  bctx.lineJoin = 'round';
+  const pass = (col, grow) => {
+    bctx.strokeStyle = col; bctx.fillStyle = col;
+    bctx.lineWidth = armW + grow; bctx.lineCap = 'butt';
+    bctx.beginPath(); bctx.moveTo(p[0].x, p[0].y - S * 0.12); bctx.lineTo(p[0].x + (p[0].x - p[9].x) * 6, p[0].y + (p[0].y - p[9].y) * 6); bctx.stroke();
+    bctx.lineCap = 'round'; bctx.lineWidth = fw * 0.9 + grow;
+    bctx.beginPath(); [0, 1, 5, 9, 13, 17].forEach((i, k) => k ? bctx.lineTo(p[i].x, p[i].y) : bctx.moveTo(p[i].x, p[i].y)); bctx.closePath(); bctx.fill(); bctx.stroke();
+    const chain = (ids, w) => { bctx.lineWidth = w + grow; bctx.beginPath(); ids.forEach((i, k) => k ? bctx.lineTo(p[i].x, p[i].y) : bctx.moveTo(p[i].x, p[i].y)); bctx.stroke(); };
+    chain([1, 2, 3, 4], fw * 1.12); chain([5, 6, 7, 8], fw); chain([9, 10, 11, 12], fw * 1.03); chain([13, 14, 15, 16], fw * 0.97); chain([17, 18, 19, 20], fw * 0.84);
+  };
+  pass('#a99a88', S * 0.035); pass('#cdbfae', 0);
+}
+
+/* ---------- camera and hand tracking ---------- */
+let camOn = false, tracker = null, stream = null, lastVT = -1, lastHandAt = 0, lastSwipe = 0, lastAuto = 0;
+async function startCamera() {
+  camBtn.disabled = true;
+  setStatus('Starting camera…');
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    video.srcObject = stream; video.hidden = false;
+    await video.play();
+  } catch (e) {
+    video.hidden = true;
+    setStatus('Camera blocked. Allow camera access for this page, then press Start camera again.', 'warn');
+    camBtn.disabled = false; return;
+  }
+  try {
+    if (!tracker) {
+      setStatus('Loading hand tracker…');
+      const mp = await import(MP + '/vision_bundle.mjs');
+      const fileset = await mp.FilesetResolver.forVisionTasks(MP + '/wasm');
+      const make = delegate => mp.HandLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: MODEL, delegate }, runningMode: 'VIDEO', numHands: 2,
+        minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5
+      });
+      try { tracker = await make('GPU'); } catch (e) { tracker = await make('CPU'); }
+    }
+  } catch (e) {
+    stopCamera();
+    setStatus('Could not load the hand tracker. Check your internet connection, then press Start camera again.', 'warn');
+    return;
+  }
+  camOn = true; lastHandAt = 0;
+  bctx.clearRect(0, 0, W, H);
+  camBtn.disabled = false; camBtn.textContent = 'Stop camera';
+  setStatus('Camera on', 'live'); setHint();
+}
+function stopCamera() {
+  camOn = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; video.srcObject = null; video.hidden = true; tracked.clear();
+  camBtn.disabled = false; camBtn.textContent = 'Start camera';
+  setStatus('Demo hand'); setHint();
+}
+function videoFit() {
+  const vw = video.videoWidth || 1280, vh = video.videoHeight || 720;
+  const sc = Math.max(W / vw, H / vh), dw = vw * sc, dh = vh * sc;
+  return { dw, dh, ox: (W - dw) / 2, oy: (H - dh) / 2 };
+}
+function onHands(res, now) {
+  const f = videoFit(), seen = new Set(), list = res.landmarks || [], world = res.worldLandmarks || [];
+  for (let i = 0; i < list.length && i < 2; i++) {
+    if (!world[i]) continue;
+    const label = (res.handedness && res.handedness[i] && res.handedness[i][0] && res.handedness[i][0].categoryName) || 'Right';
+    let key = label; if (seen.has(key)) key += '2';
+    seen.add(key);
+    const px = list[i].map(l => ({ x: f.ox + (1 - l.x) * f.dw, y: f.oy + l.y * f.dh }));      // mirrored, like a mirror
+    const w3 = world[i].map(l => ({ x: -l.x, y: -l.y, z: -l.z }));                             // same mirror, y up, z to viewer
+    let h = tracked.get(key);
+    if (!h) { h = { px, w3, hist: [] }; tracked.set(key, h); }
+    else {
+      const S0 = dist(h.px[5], h.px[17]) || 80;
+      for (let j = 0; j < 21; j++) {                                   // steadier when still, responsive when moving
+        const a = clamp(0.35 + dist(h.px[j], px[j]) / (0.1 * S0), 0.35, 1);
+        h.px[j] = { x: h.px[j].x + (px[j].x - h.px[j].x) * a, y: h.px[j].y + (px[j].y - h.px[j].y) * a };
+        h.w3[j] = a3(h.w3[j], m3(s3(w3[j], h.w3[j]), Math.max(0.3, a * 0.8)));
+      }
+    }
+    h.label = label; h.seen = now;
+    if (windowMode) {                                                  // swipe an open hand sideways to browse
+      h.hist.push({ t: now, x: h.px[9].x });
+      while (h.hist.length && now - h.hist[0].t > 400) h.hist.shift();
+      const dx = h.px[9].x - h.hist[0].x;
+      if (Math.abs(dx) > 0.2 * W && now - lastSwipe > 900) { lastSwipe = now; h.hist.length = 0; step(dx > 0 ? 1 : -1); }
+    }
+  }
+  for (const [k, h] of tracked) if (!seen.has(k) && now - h.seen > 250) tracked.delete(k);
+  if (tracked.size) lastHandAt = now;
+}
+
+/* ---------- sparkle when a piece changes ---------- */
+let current = [];
+function burst() {
+  if (reduced) return;
+  for (const h of current) {
+    const spots = cat === 'nails' ? [4, 8, 12, 16, 20] : [0];
+    for (const i of spots) for (let n = 0; n < (cat === 'nails' ? 5 : 22); n++) {
+      const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 5;
+      sparks.push({ x: h.px[i].x, y: h.px[i].y + (i === 0 ? 20 : 0), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1, life: 1, decay: 0.012 + Math.random() * 0.025, r: 3 + Math.random() * 7 });
+    }
+  }
+}
+function drawSparks() {
+  fctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  fctx.clearRect(0, 0, W, H);
+  if (!sparks.length) return;
+  fctx.globalCompositeOperation = 'lighter'; fctx.lineCap = 'round';
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const p = sparks[i];
+    p.x += p.vx; p.y += p.vy; p.vx *= 0.95; p.vy *= 0.95; p.life -= p.decay;
+    if (p.life <= 0) { sparks.splice(i, 1); continue; }
+    const r = p.r * p.life;
+    fctx.strokeStyle = 'rgba(255,236,190,' + p.life + ')'; fctx.lineWidth = 1.4;
+    fctx.beginPath(); fctx.moveTo(p.x - r, p.y); fctx.lineTo(p.x + r, p.y); fctx.moveTo(p.x, p.y - r); fctx.lineTo(p.x, p.y + r); fctx.stroke();
+  }
+  fctx.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- frame loop ---------- */
+function showMsg(t) { if (t) { msgEl.textContent = t; msgEl.hidden = false; } else msgEl.hidden = true; }
+function frame(now) {
+  if (camOn && tracker && video.readyState >= 2 && video.currentTime !== lastVT) {
+    lastVT = video.currentTime;
+    try { onHands(tracker.detectForVideo(video, now), now); } catch (e) {}
+  }
+  if (camOn) {
+    current = [...tracked.values()];
+    showMsg(current.length ? '' : 'Hold your hand up to the camera');
+    if (windowMode && !current.length && now - lastHandAt > 4000 && now - lastAuto > 4500) { lastAuto = now; step(1); }
+  } else {
+    bctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const h = demoHand(now);
+    drawMannequin(h); current = [h]; showMsg('');
+    if (windowMode && now - lastAuto > 4500) { lastAuto = now; step(1); }
+  }
+  rigs.forEach((r, i) => {
+    const h = current[i];
+    r.wrist.visible = !!h; r.nails.forEach(n => { n.visible = !!h; });
+    if (h) poseRig(r, h);
+  });
+  renderer.render(scene, cam);
+  drawSparks();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- panel ---------- */
+function swatch(c, item) {
+  if (c === 'watches') return 'radial-gradient(circle,' + item.dial + ' 0 50%,#' + new THREE.Color(METAL[item.metal].color).getHexString() + ' 52% 66%,' + (item.strap === 'steel' ? '#aab2bd' : item.strap) + ' 68% 100%)';
+  if (c === 'bracelets') return item.sw;
+  if (item.finish === 'chrome') return 'linear-gradient(135deg,#6f7884,#f5f7fa,#9aa3ae,#fff,#7c8590)';
+  if (item.finish === 'french') return 'linear-gradient(180deg,#fbf8f2 0 30%,' + item.color + ' 32% 100%)';
+  return item.color;
+}
+function renderPanel() {
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.cat === cat)));
+  const box = $('items'); box.textContent = '';
+  const mk = (idx, name, bgc) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.setAttribute('aria-pressed', String(sel[cat] === idx));
+    const s = document.createElement('span'); s.className = 'sw' + (idx < 0 ? ' none' : ''); if (bgc) s.style.background = bgc;
+    const t = document.createElement('span'); t.textContent = name;
+    b.append(s, t);
+    b.addEventListener('click', () => choose(idx));
+    box.append(b);
+  };
+  CATALOG[cat].forEach((item, i) => mk(i, item.name, swatch(cat, item)));
+  mk(-1, 'None', '');
+  const item = sel[cat] >= 0 ? CATALOG[cat][sel[cat]] : null;
+  const det = $('detail'); det.textContent = '';
+  const add = (cls, text) => { const s = document.createElement('span'); s.className = cls; s.textContent = text; det.append(s); };
+  if (item) { add('dn', item.name); add('dd', item.desc); add('dp', money(item.price)); }
+  else add('dd', 'Nothing selected in this category.');
+  $('capCat').textContent = CAT_LABEL[cat];
+  $('capName').textContent = item ? item.name : '';
+  $('capPrice').textContent = item ? money(item.price) + '  ·  ' + item.desc : '';
+}
+function choose(idx) { sel[cat] = idx; buildProducts(); renderPanel(); if (idx >= 0) burst(); }
+function step(dir) {
+  const n = CATALOG[cat].length;
+  let i = (sel[cat] < 0 ? (dir > 0 ? -1 : 0) : sel[cat]) + dir;
+  if (i >= n) { cat = CATS[(CATS.indexOf(cat) + 1) % 3]; i = 0; }
+  else if (i < 0) { cat = CATS[(CATS.indexOf(cat) + 2) % 3]; i = CATALOG[cat].length - 1; }
+  choose(i);
+}
+function setHint() {
+  hintEl.textContent = camOn ? 'Hold your hand and wrist in view. Turn your wrist to see the pieces from every side.'
+    : camPossible ? 'This is a demo hand. Press Start camera to try the pieces on your own hand.'
+    : 'This preview blocks camera access, so it shows a demo hand. Open the hosted link to try the pieces on your own hand.';
+  $('capHow').textContent = camOn ? 'Raise your hand to try it on. Swipe your hand left or right to browse.' : 'Demo loop. Start the camera first to let shoppers try pieces on.';
+}
+function setWindow(on) {
+  windowMode = on;
+  document.body.classList.toggle('window', on);
+  $('caption').hidden = !on; $('exitWin').hidden = !on;
+  lastAuto = performance.now();
+  try {
+    if (on && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    else if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  } catch (e) {}
+}
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => { cat = b.dataset.cat; renderPanel(); }));
+$('fit').addEventListener('input', e => { fit = +e.target.value; });
+$('flip').addEventListener('change', e => { flip = e.target.checked; });
+camBtn.addEventListener('click', () => { camOn ? stopCamera() : startCamera(); });
+$('winBtn').addEventListener('click', () => setWindow(true));
+$('exitWin').addEventListener('click', () => setWindow(false));
+document.addEventListener('keydown', e => {
+  if (e.target instanceof HTMLInputElement) return;
+  if (e.key === 'ArrowRight') step(1);
+  else if (e.key === 'ArrowLeft') step(-1);
+  else if (e.key === 'Escape' && windowMode) setWindow(false);
+});
+
+function resize() {
+  const r = wrap.getBoundingClientRect();
+  W = Math.max(200, r.width); H = Math.max(200, r.height);
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  for (const c of [bg, fx]) { c.width = Math.round(W * DPR); c.height = Math.round(H * DPR); }
+  renderer.setPixelRatio(DPR); renderer.setSize(W, H, false);
+  cam.right = W; cam.top = H; cam.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(wrap);
+
+if (!camPossible) { camBtn.hidden = true; $('flipLbl').hidden = true; }
+resize(); buildProducts(); renderPanel(); setHint(); setStatus('Demo hand');
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
